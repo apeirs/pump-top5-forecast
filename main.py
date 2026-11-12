@@ -29,7 +29,9 @@ SIZE_PRIOR = 0.04      # broad prior weight in the sizes
 CURVE_FULL = 400.0     # SOL, a curve near completion
 CURVE_STALL = 0.5      # hours: a curve coin's graduation chance falls as 1 / (1 + age / CURVE_STALL)
 LEVEL_W = 0.5         # weight of the history's own top-5 level in the place-cap prior
-LEVEL_HOURS = 4.0      # hours of marks the level is taken over
+LEVEL_HOURS = 4.0      # hours of marks the level (and the graduation pace) is taken over
+GRAD_W = 0.0           # newcomer rate scales as (observed graduations per hour / REF_GRAD) ** GRAD_W, within 0.5..2
+REF_GRAD = 17.0        # graduations per hour the library rate stands for (practice marks: ~17-25 per hour)
 YOUNG = 1.0           # survival exponent for a coin graduated just before the cut (ramps to 1 at 3 h)
 NEW_SHIFT = -0.4      # log10 shift of newcomers older than 3 h (library survivor bias)
 SIG_SCALE = 1.0       # multiplies the survivors' log-cap noise
@@ -199,6 +201,13 @@ def main():
         gap = max(-0.5, min(0.5, gap))
         prior_samples = [[v + LEVEL_W * gap for v in s] for s in prior_samples]
     prior = prior_bins(prior_samples, edges, places)
+    # the day's graduation pace from the marks' counts over the last LEVEL_HOURS, against REF_GRAD per hour
+    rate = RATE
+    gm = [(m['_t'], (m.get('counts') or {}).get('graduated')) for m in marks if m['_t'] >= t_last - LEVEL_HOURS * 3600]
+    gm = [(t, g) for t, g in gm if isinstance(g, (int, float)) and not isinstance(g, bool)]
+    if GRAD_W and len(gm) >= 2 and gm[-1][0] - gm[0][0] >= 1800 and gm[-1][1] >= gm[0][1]:
+        obs = (gm[-1][1] - gm[0][1]) / ((gm[-1][0] - gm[0][0]) / 3600)
+        rate = RATE * max(0.5, min(2.0, (max(obs, 0.1) / REF_GRAD) ** GRAD_W))
     cand = candidates(marks)
     last_rows = {r.get('mint') for r in (ref['rows'] if ref else []) if isinstance(r, dict)}
     hist = sorted(cand.values(), key=lambda k: (-k.x, k.mint))
@@ -243,7 +252,7 @@ def main():
                     pg *= 0.3
                 plan.append((k, 'curve', pg, 0.0))
         sig = SIG_SCALE * (0.18 + 0.06 * math.sqrt(h))
-        lam = RATE * h
+        lam = rate * h
         pools = [(k.x, k.mint, p) for k, kind, p, age in plan if kind == 'pool' and p > 1e-4]
         curves = [(k.x, k.mint, p) for k, kind, p, age in plan if kind == 'curve']
         # coins that cannot move (dead pools, curve coins that stay put) only matter as chart filler for the top 5
