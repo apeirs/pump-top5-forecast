@@ -28,7 +28,11 @@ SIZE_SMOOTH = 1.5      # bins, Gaussian smoothing of the size histogram
 SIZE_PRIOR = 0.04      # broad prior weight in the sizes
 CURVE_FULL = 400.0     # SOL, a curve near completion
 CURVE_STALL = 0.5      # hours: a curve coin's graduation chance falls as 1 / (1 + age / CURVE_STALL)
-SIG_SCALE = 1.0        # multiplies the survivors' log-cap noise
+LEVEL_W = 0.0          # weight of the history's own top-5 level in the place-cap prior
+LEVEL_HOURS = 4.0      # hours of marks the level is taken over
+YOUNG = 1.0           # survival exponent for a coin graduated just before the cut (ramps to 1 at 3 h)
+NEW_SHIFT = -0.4      # log10 shift of newcomers older than 3 h (library survivor bias)
+SIG_SCALE = 1.0       # multiplies the survivors' log-cap noise
 PRIOR_BW = 0.22        # log10, kernel width of the empirical place-cap prior
 PRIOR_TAIL = 0.3       # share of a broad t3 around the prior's median
 PRIOR_TAIL_SCALE = 0.45
@@ -182,6 +186,18 @@ def main():
         a, b = os.environ['MAKEFUN_BT_EXCLUDE'].split(',')
         exclude = (float(a), float(b))
     w, lib, prior_samples = load_library(exclude)
+    # the day's own level: the mean log cap of the top 5 over the last LEVEL_HOURS of marks, against the prior's
+    # level; the prior is shifted by LEVEL_W of the gap (a busier or quieter day than the library's)
+    lv = []
+    for m in marks:
+        if m['_t'] >= t_last - LEVEL_HOURS * 3600 and m['rows']:
+            xs = sorted((cap_of(r) or 0.0 for r in m['rows'] if isinstance(r, dict)), reverse=True)[:places]
+            if len(xs) == places:
+                lv.append(sum(xs) / places)
+    if lv and prior_samples and LEVEL_W:
+        gap = sum(lv) / len(lv) - sum(sum(s[:places]) / places for s in prior_samples) / len(prior_samples)
+        gap = max(-0.5, min(0.5, gap))
+        prior_samples = [[v + LEVEL_W * gap for v in s] for s in prior_samples]
     prior = prior_bins(prior_samples, edges, places)
     cand = candidates(marks)
     last_rows = {r.get('mint') for r in (ref['rows'] if ref else []) if isinstance(r, dict)}
@@ -213,7 +229,10 @@ def main():
                 if k.x < ALIVE or stale:
                     plan.append((k, 'dead', 0.0, age))
                 else:
-                    plan.append((k, 'pool', surv_prob(w, h + 1 / 6, k.x, age), age))
+                    # young coins over-survive long horizons in the fit (backtest calibration): survival raised to the
+                    # power YOUNG (leaves short-horizon survival near 1 alone), ramped out by 3 h of age
+                    young = YOUNG + (1 - YOUNG) * min(1.0, age / 3)
+                    plan.append((k, 'pool', surv_prob(w, h + 1 / 6, k.x, age) ** young, age))
             else:
                 cap = 10 ** k.x
                 pg = 1.0 if k.venue == 'migrating' else min(1.0, max(0.0, (cap - 28) / (CURVE_FULL - 28))) ** 2
@@ -264,7 +283,9 @@ def main():
                 while i >= len(row) and tries < 20:
                     row = lib[int(rand() * nl)]
                     tries += 1
-                vals.append((row[min(i, len(row) - 1)] + 0.03 * gauss(0, 1), None))
+                # the library is survivor-biased: older newcomers are shifted down (NEW_SHIFT, ramped in from 1 h to
+                # 3 h of age, so the first hour, which the practice-shaped backtests check, is left as observed)
+                vals.append((row[min(i, len(row) - 1)] + 0.03 * gauss(0, 1) + NEW_SHIFT * min(1.0, max(0.0, (i - 6) / 12)), None))
             vals.sort(key=lambda t: -t[0])  # noqa
             for kk in range(places):
                 if kk < len(vals):
