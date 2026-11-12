@@ -21,13 +21,14 @@ OUT = os.environ.get('MAKEFUN_OUTPUT_DIR', '/output')
 PLACES = 5
 ALIVE = 2.3            # log10 SOL: a pool coin under 200 SOL counts as dead
 RATE = 4.5             # newcomer graduations per hour (library-consistent rate)
-PATHS = 1500           # simulated paths per read
+PATHS = 2500           # simulated paths per read
 TEMPER = 0.12          # share of each place's named mass handed back to the unnamed share
 P_MIN = 2e-4           # least p a named history coin gets
 SIZE_SMOOTH = 1.5      # bins, Gaussian smoothing of the size histogram
 SIZE_PRIOR = 0.04      # broad prior weight in the sizes
 CURVE_FULL = 400.0     # SOL, a curve near completion
 CURVE_STALL = 0.5      # hours: a curve coin's graduation chance falls as 1 / (1 + age / CURVE_STALL)
+SIG_SCALE = 1.0        # multiplies the survivors' log-cap noise
 PRIOR_BW = 0.22        # log10, kernel width of the empirical place-cap prior
 PRIOR_TAIL = 0.3       # share of a broad t3 around the prior's median
 PRIOR_TAIL_SCALE = 0.45
@@ -217,7 +218,7 @@ def main():
                 if stale:
                     pg *= 0.3
                 plan.append((k, 'curve', pg, 0.0))
-        sig = 0.18 + 0.06 * math.sqrt(h)
+        sig = SIG_SCALE * (0.18 + 0.06 * math.sqrt(h))
         lam = RATE * h
         pools = [(k.x, k.mint, p) for k, kind, p, age in plan if kind == 'pool' and p > 1e-4]
         curves = [(k.x, k.mint, p) for k, kind, p, age in plan if kind == 'curve']
