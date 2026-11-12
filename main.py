@@ -27,8 +27,8 @@ P_MIN = 2e-4           # least p a named history coin gets
 SIZE_SMOOTH = 1.5      # bins, Gaussian smoothing of the size histogram
 SIZE_PRIOR = 0.04      # broad prior weight in the sizes
 CURVE_FULL = 400.0     # SOL, a curve near completion
-PRIOR_BW = 0.08        # log10, kernel width of the empirical place-cap prior
-PRIOR_TAIL = 0.15      # share of a broad t3 around the prior's median
+PRIOR_BW = 0.22        # log10, kernel width of the empirical place-cap prior
+PRIOR_TAIL = 0.3       # share of a broad t3 around the prior's median
 PRIOR_TAIL_SCALE = 0.45
 H_MC = 1.5             # hours: newcomer-held place caps trust the simulation as exp(-h / H_MC), else the prior
 LIB_FROM = 0           # library coins graduated before this unix time are left out (survivor-biased)
@@ -284,10 +284,12 @@ def main():
                 ps.setdefault(m, 0.0)
         items = []
         for m, p in ps.items():
-            q = (1 - TEMPER) * p
-            q = max(q, P_MIN if p > 0 else P_MIN / 4)
-            items.append((q, m))
-        items.sort(key=lambda t: (-t[0], t[1]))
+            # a coin the simulation never put here gets 0 (the floor scores it the same as any p under 1e-4); its row
+            # still takes it out of the unnamed share if it sits on the answer chart
+            q = max((1 - TEMPER) * p, P_MIN) if p > 0 else 0.0
+            items.append((q, -cand[m].x if m in cand else 0.0, m))
+        # highest p first, then the largest caps (the likeliest to sit on the chart)
+        items = [(q, m) for q, _, m in sorted(items, key=lambda t: (-t[0], t[1], t[2]))]
         items = items[:100]
         s = sum(q for q, _ in items)
         if s > 1 - 1e-6:
