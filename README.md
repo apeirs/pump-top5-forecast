@@ -17,7 +17,9 @@ A seeded Monte Carlo over the answer reads named in `task.json`:
   and every coin of the last mark is named (up to 100 per place) so that history coins on the answer chart do not
   dilute the unnamed share left for the coins born after the cut.
 - Sizes: when a history coin holds a place, its simulated cap; when a newcomer does, the simulated cap at short
-  horizons, blending into an empirical place-cap prior (kernel density plus a broad t tail) at long ones.
+  horizons, blending into an empirical place-cap prior (kernel density plus a broad t tail) at long ones; the prior
+  is shifted toward the day's own level (the history's top-5 caps over its last 4 hours).
+- Newcomers older than 3 hours are shifted down to offset the survivor bias of the trajectory library.
 
 Deterministic: the random generator is seeded from the input bytes.
 
