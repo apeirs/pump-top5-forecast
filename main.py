@@ -27,6 +27,7 @@ P_MIN = 2e-4           # least p a named history coin gets
 SIZE_SMOOTH = 1.5      # bins, Gaussian smoothing of the size histogram
 SIZE_PRIOR = 0.04      # broad prior weight in the sizes
 CURVE_FULL = 400.0     # SOL, a curve near completion
+CURVE_STALL = 0.5      # hours: a curve coin's graduation chance falls as 1 / (1 + age / CURVE_STALL)
 PRIOR_BW = 0.22        # log10, kernel width of the empirical place-cap prior
 PRIOR_TAIL = 0.3       # share of a broad t3 around the prior's median
 PRIOR_TAIL_SCALE = 0.45
@@ -211,6 +212,8 @@ def main():
                 cap = 10 ** k.x
                 pg = 1.0 if k.venue == 'migrating' else min(1.0, max(0.0, (cap - 28) / (CURVE_FULL - 28))) ** 2
                 pg *= 1 - math.exp(-(h + 1 / 6) / 0.5)
+                # a coin still on its curve long after launch has mostly stalled there
+                pg /= 1 + max(0.0, (t_last - k.created) / 3600) / CURVE_STALL
                 if stale:
                     pg *= 0.3
                 plan.append((k, 'curve', pg, 0.0))
