@@ -108,7 +108,9 @@ def candidates(marks):
             k.x, k.last_seen = x, t
             k.peak = max(k.peak, x)
             venue = r.get('venue')
-            k.venue = venue if venue in ('curve', 'migrating', 'pool') else 'pool'
+            if venue not in ('curve', 'migrating', 'pool'):
+                venue = 'curve' if r.get('complete') is False else 'pool'
+            k.venue = venue
             if k.venue == 'pool' and k.grad is None:
                 # graduated between the previous mark and this one, unless it came in already pooled
                 k.grad = max(k.created, t - 300)
@@ -169,7 +171,10 @@ def main():
     marks, raw = load_marks()
     rng = random.Random(hashlib.sha256(raw + json.dumps(task, sort_keys=True).encode()).hexdigest())
     reads = sorted(ts(r) for r in task.get('reads', []))
-    t_last = marks[-1]['_t'] if marks else ts(task.get('history_until', task['t0']))
+    # the reference mark: the last one that ranked any coin (an empty trailing mark says nothing about the coins)
+    ranked_marks = [m for m in marks if m['rows']]
+    ref = ranked_marks[-1] if ranked_marks else None
+    t_last = ref['_t'] if ref else ts(task.get('history_until', task['t0']))
     if not reads:
         reads = [ts(task['window']['answer_at'])]
     exclude = None
@@ -179,7 +184,7 @@ def main():
     w, lib, prior_samples = load_library(exclude)
     prior = prior_bins(prior_samples, edges, places)
     cand = candidates(marks)
-    last_rows = {r.get('mint') for r in (marks[-1]['rows'] if marks else []) if isinstance(r, dict)}
+    last_rows = {r.get('mint') for r in (ref['rows'] if ref else []) if isinstance(r, dict)}
     hist = sorted(cand.values(), key=lambda k: (-k.x, k.mint))
 
     tally = [dict() for _ in range(places)]
